@@ -3,6 +3,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { indexFolder } from '../../lib/indexer';
 import { isSupportedImage } from '../../lib/imageUtils';
 import { FolderOpen, Shield, Zap, Search, ArrowRight } from 'lucide-react';
+import { QualityPickerModal } from '../QualityPickerModal';
+import type { QualityMode } from '../../types';
 
 async function collectFilesFromHandle(handle: FileSystemDirectoryHandle): Promise<File[]> {
   const files: File[] = [];
@@ -28,6 +30,9 @@ export function WelcomeScreen() {
   } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [showQualityModal, setShowQualityModal] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFolderName, setSelectedFolderName] = useState<string>('');
 
   const handleSelectFolder = useCallback(async () => {
     if (!('showDirectoryPicker' in window)) {
@@ -49,40 +54,64 @@ export function WelcomeScreen() {
         return;
       }
 
-      showToast(`Found ${files.length} images. Starting indexing...`, 'info');
+      // Instead of starting immediately, prompt user for Quality Mode
+      setSelectedFiles(files);
+      setSelectedFolderName(handle.name);
+      setShowQualityModal(true);
+      setIsLoading(false);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        showToast('Failed to access folder. Please try again.', 'error');
+      }
+      setIsLoading(false);
+    }
+  }, [setFolderHandle, updateSettings, showToast]);
+
+  const handleConfirmQuality = useCallback(
+    async (mode: QualityMode) => {
+      setShowQualityModal(false);
+      await updateSettings({ qualityMode: mode });
+
+      showToast(`Starting indexing with ${mode.toUpperCase()} quality...`, 'info');
       setView('indexing');
       setIsIndexing(true);
 
       const abortController = new AbortController();
       useAppStore.getState().setAbortController(abortController);
 
-      await indexFolder(
-        files,
-        (progress) => setIndexingProgress(progress),
-        abortController.signal
-      );
+      try {
+        await indexFolder(
+          selectedFiles,
+          (progress) => setIndexingProgress(progress),
+          abortController.signal,
+          mode
+        );
 
-      await loadScreenshots();
-      await updateSettings({ lastScanAt: Date.now() });
-      setIsIndexing(false);
-      setView('library');
-      showToast('Indexing complete! Your screenshots are ready.', 'success');
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        // User cancelled folder picker
-      } else {
-        showToast('Failed to access folder. Please try again.', 'error');
+        await loadScreenshots();
+        await updateSettings({ lastScanAt: Date.now() });
+        setIsIndexing(false);
+        setView('library');
+        showToast('Indexing complete! Your screenshots are ready.', 'success');
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          showToast('Indexing stopped or encountered an issue.', 'error');
+        }
+        setIsIndexing(false);
       }
-      setIsLoading(false);
-      setIsIndexing(false);
-    }
+    },
+    [selectedFiles, updateSettings, showToast, setView, setIsIndexing, setIndexingProgress, loadScreenshots]
+  );
+
+  const handleCancelQuality = useCallback(() => {
+    setShowQualityModal(false);
+    setIsLoading(false);
   }, []);
 
   const handleContinue = useCallback(async () => {
     // Try to continue with existing indexed data
     await loadScreenshots();
     setView('library');
-  }, []);
+  }, [loadScreenshots, setView]);
 
   const hasExistingData = settings.folderName !== null;
 
@@ -165,6 +194,15 @@ export function WelcomeScreen() {
           ))}
         </div>
       </div>
+
+      <QualityPickerModal
+        isOpen={showQualityModal}
+        filesCount={selectedFiles.length}
+        folderName={selectedFolderName}
+        initialMode={settings.qualityMode || 'mid'}
+        onConfirm={handleConfirmQuality}
+        onCancel={handleCancelQuality}
+      />
     </div>
   );
 }

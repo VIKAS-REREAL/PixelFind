@@ -1,14 +1,20 @@
 import React from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { X } from 'lucide-react';
+import { X, Clock, Sliders } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { QUALITY_PRESETS } from '../../types';
+import { formatEstimatedTime } from '../../lib/imageUtils';
 
 export function IndexingScreen() {
-  const { indexingProgress, abortController, setIsIndexing, setView, loadScreenshots, showToast } = useAppStore();
+  const { indexingProgress, abortController, setIsIndexing, setView, loadScreenshots, showToast, settings } = useAppStore();
 
   const { total, processed, currentFile, alreadyIndexed, failed, phase } = indexingProgress;
 
   const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+  const remaining = Math.max(0, total - processed);
+  const preset = QUALITY_PRESETS[settings.qualityMode || 'mid'];
+  const estSecondsRemaining = remaining * preset.secPerImage;
+  const estRemainingText = formatEstimatedTime(estSecondsRemaining);
 
   const handleCancel = () => {
     abortController?.abort();
@@ -61,6 +67,18 @@ export function IndexingScreen() {
               className="h-full bg-accent rounded-full transition-all duration-300"
               style={{ width: `${pct}%` }}
             />
+          </div>
+          <div className="flex items-center justify-between text-xs text-text-secondary mt-2.5 px-0.5">
+            <span className="flex items-center gap-1.5 font-medium text-accent">
+              <Sliders size={12} />
+              Quality: {preset.label}
+            </span>
+            {phase === 'ocr' && remaining > 0 && (
+              <span className="flex items-center gap-1 text-text-secondary font-mono">
+                <Clock size={12} className="text-accent" />
+                Remaining: {estRemainingText}
+              </span>
+            )}
           </div>
         </div>
 

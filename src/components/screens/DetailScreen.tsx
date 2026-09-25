@@ -1,15 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { TagBadge } from '../ui/TagBadge';
 import { CategoryChip } from '../ui/CategoryChip';
-import { ArrowLeft, Calendar, FileImage, Copy, ExternalLink, FileText, Hash } from 'lucide-react';
+import { ArrowLeft, Calendar, FileImage, Copy, ExternalLink, FileText, Hash, Eye, Sparkles } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '../../lib/utils';
 import { cn } from '../../lib/utils';
 
 export function DetailScreen() {
-  const { selectedScreenshot: s, setView, showToast } = useAppStore();
+  const { selectedScreenshot: s, setView, showToast, folderHandle } = useAppStore();
   const [imgError, setImgError] = useState(false);
   const [ocrExpanded, setOcrExpanded] = useState(false);
+  const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
+  const [isFullResLoaded, setIsFullResLoaded] = useState(false);
+
+  useEffect(() => {
+    let activeUrl: string | null = null;
+    let isCancelled = false;
+
+    async function loadFullOriginal() {
+      if (!folderHandle || !s?.filename) return;
+      try {
+        const fileHandle = await (folderHandle as any).getFileHandle(s.filename);
+        const file = await fileHandle.getFile();
+        if (isCancelled) return;
+        const url = URL.createObjectURL(file);
+        activeUrl = url;
+        setFullImageUrl(url);
+        setIsFullResLoaded(true);
+      } catch {
+        // If handle is no longer valid or denied, keep using s.thumbnail
+      }
+    }
+
+    loadFullOriginal();
+
+    return () => {
+      isCancelled = true;
+      if (activeUrl) {
+        URL.revokeObjectURL(activeUrl);
+      }
+    };
+  }, [folderHandle, s?.filename]);
 
   if (!s) {
     setView('library');
@@ -36,7 +67,7 @@ export function DetailScreen() {
           Back to Library
         </button>
         <div className="h-4 w-px bg-border" />
-        <p className="text-sm text-text-secondary truncate max-w-xs" title={s.filename}>
+        <p className="text-sm text-text-secondary truncate max-w-xs font-mono" title={s.filename}>
           {s.filename}
         </p>
         <div className="flex-1" />
@@ -45,26 +76,56 @@ export function DetailScreen() {
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-auto">
         {/* Left: Image */}
-        <div className="lg:flex-1 flex items-start justify-center p-6 bg-bg">
-          <div className="w-full max-w-3xl">
-            {s.thumbnail && !imgError ? (
-              <div className="rounded-xl overflow-hidden border border-border shadow-sm bg-surface">
+        <div className="lg:flex-1 flex flex-col items-center justify-start p-6 bg-slate-50/50 overflow-y-auto">
+          <div className="w-full max-w-4xl flex flex-col items-center">
+            {/* Resolution indicator bar */}
+            <div className="w-full flex items-center justify-between mb-3 px-1 text-xs">
+              <div className="flex items-center gap-2">
+                {isFullResLoaded ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <Sparkles size={12} className="text-emerald-500" />
+                    Crystal Clear (Original File)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                    <Eye size={12} />
+                    Preview Image
+                  </span>
+                )}
+              </div>
+
+              {fullImageUrl && (
+                <a
+                  href={fullImageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 text-accent hover:underline font-medium"
+                >
+                  <ExternalLink size={13} />
+                  Open Full Size in New Tab
+                </a>
+              )}
+            </div>
+
+            {/* Main Image Container */}
+            {(fullImageUrl || (s.thumbnail && !imgError)) ? (
+              <div className="w-full rounded-2xl overflow-hidden border border-border shadow-sm bg-white p-2">
                 <img
-                  src={s.thumbnail}
+                  src={fullImageUrl || s.thumbnail}
                   alt={s.filename}
-                  className="w-full object-contain"
+                  className="w-full max-h-[75vh] object-contain rounded-xl select-none"
                   onError={() => setImgError(true)}
                 />
               </div>
             ) : (
-              <div className="aspect-video bg-slate-100 rounded-xl border border-border flex items-center justify-center">
+              <div className="w-full aspect-video bg-slate-100 rounded-xl border border-border flex items-center justify-center">
                 <FileImage size={48} className="text-slate-300" />
               </div>
             )}
 
             {/* Privacy note */}
             <p className="text-xs text-text-secondary mt-3 text-center">
-              This is a thumbnail preview. The original file stays on your device.
+              Rendered directly from your local device. 100% private.
             </p>
           </div>
         </div>

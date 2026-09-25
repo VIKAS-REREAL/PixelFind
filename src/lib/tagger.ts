@@ -113,7 +113,6 @@ export function detectCategory(ocrText: string, filename: string, tags: string[]
 export function cleanOcrText(raw: string): string {
   return raw
     .replace(/[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]/g, '') // control chars
-    .replace(/\|/g, 'I')          // common OCR artifact
     .replace(/[ \t]{3,}/g, '  ')  // collapse spaces
     .replace(/\n{4,}/g, '\n\n\n') // collapse blank lines
     .trim();

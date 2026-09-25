@@ -47,11 +47,19 @@ export function Sidebar({ allTagsList }: SidebarProps) {
         <span className="font-semibold text-text-primary text-sm tracking-tight">PixelFind</span>
       </div>
 
-      {/* Folder info */}
+      {/* Folder info & Quality badge */}
       {settings.folderName && (
-        <div className="mx-3 mt-3 mb-1 px-3 py-2 bg-accent-light rounded-lg flex items-center gap-2">
-          <Folder size={13} className="text-accent flex-shrink-0" />
-          <p className="text-xs text-accent font-medium truncate">{settings.folderName}</p>
+        <div className="mx-3 mt-3 mb-1 p-2.5 bg-accent-light/50 border border-accent/20 rounded-xl space-y-1">
+          <div className="flex items-center gap-2">
+            <Folder size={13} className="text-accent flex-shrink-0" />
+            <p className="text-xs text-text-primary font-semibold truncate" title={settings.folderName}>{settings.folderName}</p>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-text-secondary pt-0.5">
+            <span>OCR Quality:</span>
+            <span className="font-semibold text-accent uppercase tracking-wider text-[10px] bg-white px-2 py-0.5 rounded shadow-2xs border border-accent/10">
+              {settings.qualityMode || 'mid'}
+            </span>
+          </div>
         </div>
       )}
 

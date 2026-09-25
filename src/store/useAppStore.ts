@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ScreenshotRecord, IndexingProgress, Category, AppSettings } from '../types';
+import type { ScreenshotRecord, IndexingProgress, Category, AppSettings, QualityMode } from '../types';
 import type { SearchResult } from '../types';
 import { getAllScreenshots, getSettings, saveSettings } from '../lib/db';
 
@@ -51,6 +51,12 @@ interface AppState {
   selectedScreenshot: ScreenshotRecord | null;
   setSelectedScreenshot: (s: ScreenshotRecord | null) => void;
 
+  // Quality picker modal
+  showQualityPicker: boolean;
+  qualityPickerFiles: File[];
+  qualityPickerFolderName: string;
+  setShowQualityPicker: (show: boolean, files?: File[], folderName?: string) => void;
+
   // Toast
   toast: { message: string; type: 'info' | 'success' | 'error' } | null;
   showToast: (message: string, type?: 'info' | 'success' | 'error') => void;
@@ -65,7 +71,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentView: 'welcome',
   setView: (view) => set({ currentView: view }),
 
-  settings: { folderName: null, smartSearchEnabled: false, lastScanAt: null },
+  settings: { folderName: null, smartSearchEnabled: false, lastScanAt: null, qualityMode: 'mid' as QualityMode },
   loadSettings: async () => {
     const s = await getSettings();
     set({ settings: s });
@@ -116,6 +122,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   selectedScreenshot: null,
   setSelectedScreenshot: (s) => set({ selectedScreenshot: s }),
+
+  showQualityPicker: false,
+  qualityPickerFiles: [],
+  qualityPickerFolderName: '',
+  setShowQualityPicker: (show, files = [], folderName = '') =>
+    set({
+      showQualityPicker: show,
+      qualityPickerFiles: files,
+      qualityPickerFolderName: folderName,
+    }),
 
   toast: null,
   showToast: (message, type = 'info') => {

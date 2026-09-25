@@ -1,10 +1,10 @@
-// tesseract.js v7 is CommonJS. Vite will pre-bundle it with CJS->ESM interop.
-// After pre-bundling, the default export contains all named exports.
-// We use dynamic import to handle this gracefully.
+// tesseract.js v7 is CommonJS. Vite pre-bundles it with CJS->ESM interop.
+// Dynamic import handles the interop gracefully.
 
 import type { Worker } from 'tesseract.js';
-import type { ScreenshotRecord, IndexingProgress } from '../types';
-import { generateThumbnail, computeFileHash, hashToId, isSupportedImage, downscaleForOCR } from './imageUtils';
+import type { ScreenshotRecord, IndexingProgress, QualitySettings } from '../types';
+import { QUALITY_PRESETS } from '../types';
+import { generateThumbnail, computeFileHash, hashToId, isSupportedImage, prepareForOCR } from './imageUtils';
 import { extractTags, detectCategory, cleanOcrText } from './tagger';
 import {
   upsertScreenshot,
@@ -12,16 +12,12 @@ import {
   getAllScreenshots,
 } from './db';
 
-const BATCH_SIZE = 2; // Process 2 images in parallel
-
 export type ProgressCallback = (progress: IndexingProgress) => void;
 
 let ocrWorker: Worker | null = null;
 
 async function getTesseractCreateWorker() {
-  // Dynamic import ensures Vite pre-bundles tesseract.js first
   const mod = await import('tesseract.js');
-  // Vite CJS interop: named exports available on default or directly
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createWorker = (mod as any).createWorker ?? (mod as any).default?.createWorker;
   if (!createWorker) throw new Error('tesseract.js createWorker not found');
@@ -32,7 +28,7 @@ async function getOCRWorker(): Promise<Worker> {
   if (!ocrWorker) {
     const createWorker = await getTesseractCreateWorker();
     ocrWorker = await createWorker('eng', 1, {
-      logger: () => {}, // suppress verbose logs
+      logger: () => {},
     });
   }
   return ocrWorker!;
@@ -47,18 +43,19 @@ export async function terminateOCRWorker(): Promise<void> {
 
 async function processOneFile(
   file: File,
-  worker: Worker
+  worker: Worker,
+  quality: QualitySettings
 ): Promise<ScreenshotRecord> {
   const fileHash = computeFileHash(file);
   const id = hashToId(fileHash);
 
-  // Generate thumbnail
-  const thumbnail = await generateThumbnail(file, 400);
+  // Thumbnail with quality settings
+  const thumbnail = await generateThumbnail(file, quality);
 
-  // Downscale for OCR
+  // OCR with quality settings
   let ocrText = '';
   try {
-    const blob = await downscaleForOCR(file, 1200);
+    const blob = await prepareForOCR(file, quality);
     const { data } = await worker.recognize(blob as Blob);
     ocrText = cleanOcrText(data.text);
   } catch (_e) {
@@ -68,7 +65,7 @@ async function processOneFile(
   const tags = extractTags(ocrText, file.name);
   const category = detectCategory(ocrText, file.name, tags);
 
-  const record: ScreenshotRecord = {
+  return {
     id,
     filename: file.name,
     ocrText,
@@ -81,15 +78,17 @@ async function processOneFile(
     fileSize: file.size,
     fileHash,
   };
-
-  return record;
 }
 
 export async function indexFolder(
   files: File[],
   onProgress: ProgressCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  qualityMode: keyof typeof QUALITY_PRESETS = 'mid'
 ): Promise<{ indexed: number; skipped: number; failed: number }> {
+  const quality = QUALITY_PRESETS[qualityMode];
+  const BATCH_SIZE = quality.batchSize;
+
   const supported = files.filter(f => isSupportedImage(f.name));
 
   const existingRecords = await getAllScreenshots();
@@ -109,7 +108,7 @@ export async function indexFolder(
     }
   }
 
-  // Remove stale records
+  // Remove stale records (deleted files)
   for (const [hash, record] of existingHashes) {
     if (!seenHashes.has(hash)) {
       await deleteScreenshotById(record.id);
@@ -149,7 +148,7 @@ export async function indexFolder(
 
     const batch = newFiles.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(file => processOneFile(file, worker))
+      batch.map(file => processOneFile(file, worker, quality))
     );
 
     for (let j = 0; j < results.length; j++) {

@@ -120,7 +120,8 @@ export function LibraryScreen() {
       await indexFolder(
         files,
         (progress) => setIndexingProgress(progress),
-        abortController.signal
+        abortController.signal,
+        settings.qualityMode || 'mid'
       );
       await loadScreenshots();
       await updateSettings({ lastScanAt: Date.now() });

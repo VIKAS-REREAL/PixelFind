@@ -19,7 +19,7 @@ export const db = new PixelFindDB();
 // Settings helpers
 export async function getSettings(): Promise<AppSettings> {
   const s = await db.settings.get(1);
-  return s ?? { folderName: null, smartSearchEnabled: false, lastScanAt: null };
+  return s ?? { folderName: null, smartSearchEnabled: false, lastScanAt: null, qualityMode: 'mid' };
 }
 
 export async function saveSettings(partial: Partial<AppSettings>): Promise<void> {
